@@ -1,0 +1,66 @@
+#!/bin/bash
+
+alias hls='sudo -u hdfs -- hdfs dfs -ls'
+alias hrm='sudo -u hdfs -- hdfs dfs -rm'
+alias hrmr='sudo -u hdfs -- hdfs dfs -rm -r'
+alias hput='sudo -u hdfs -- hdfs dfs -put'
+alias hget='sudo -u hdfs -- hdfs dfs -get'
+alias hcp='sudo -u hdfs -- hdfs dfs -cp'
+alias hmv='sudo -u hdfs -- hdfs dfs -mv'
+alias hcat='sudo -u hdfs -- hdfs dfs -cat'
+alias hchmod='sudo -u hdfs -- hdfs dfs -chmod'
+alias hmkdir='sudo -u hdfs -- hdfs dfs -mkdir'
+alias hdu='sudo -u hdfs -- hdfs dfs -du -h'
+
+start_suggestions_from="/"
+
+__hls(){
+  hls $1
+}
+
+
+_hdfs_completions(){
+  local IFS=$'\n'
+  local cur=${COMP_WORDS[COMP_CWORD]}
+  local prev=${COMP_WORDS[COMP_CWORD-1]}
+
+  # Beginning: only command is present (no args)
+  if [[
+      (($COMP_CWORD -eq 1) && ("${cur}" == "") && ("$prev" != "hput")) ||
+      (($COMP_CWORD -eq 2) && ("${COMP_WORDS[0]}" == "hput")) && ("${cur}" == "")
+    ]]; then
+    COMPREPLY="${start_suggestions_from}"
+
+  # When $cur is not empty, i.e. path is provided
+  elif [[
+        ! (("${COMP_WORDS[0]}" == "hput") && (${#COMP_WORDS[@]} -eq 2)) &&
+        ! (("${COMP_WORDS[0]}" == "hget") && (${#COMP_WORDS[@]} -eq 3))
+      ]]; then
+    cur_new=`echo ${cur} | awk 'match($0,/\/.*\//){print substr($0,RSTART,RLENGTH-1)}'`
+    cur_new="${cur_new}/"
+    ls_results=( $(__hls ${cur_new}) )
+    unset ls_results[0]
+
+    for i in "${!ls_results[@]}"; do
+      item_type=`echo ${ls_results[$i]:0:1}`
+      item_name=`echo ${ls_results[$i]} | awk -F ' ' '{print $NF}'`
+      if [[ "${item_type}" == "d" ]]; then
+        ls_results[$i]="${item_name}/"
+      else
+        ls_results[$i]="${item_name}"
+      fi
+    done
+
+    # Handling root directory separately due to strange complete behaviour (adding extra slash to some directories)
+    if [[ "${cur}" == "/" ]]; then
+      for i in "${!ls_results[@]}"; do
+        ls_results[$i]="${ls_results[$i]: 1}"
+        COMPREPLY=(`compgen -W "${ls_results[*]}"`)
+      done
+    else
+      COMPREPLY=(`compgen -W "${ls_results[*]}" -- "${cur}"`)
+    fi
+  fi
+}
+
+complete -o filenames -o nospace -o default -F _hdfs_completions "hls" "hrm" "hrmr" "hput" "hget" "hcp" "hmv" "hcat" "hchmod" "hmkdir" "hdu"
